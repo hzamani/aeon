@@ -31,12 +31,55 @@ defmodule Aeon.Series do
     end
   end
 
-  def points(series) do
-    transform(series, fn _ -> :unroll end, &Enum.to_list/1, [], &++/2)
+  def metadata(series, from, to \\ :now) do
+    decide = fn metadata ->
+      {t1, t2, _} = Aggregator.info(metadata)
+
+      cond do
+        t2 < from or to < t1 -> :skip
+        from <= t1 and t2 <= to -> {:return, metadata}
+        true -> :unroll
+      end
+    end
+
+    unit = Aggregator.clear(series.metadata)
+
+    combine = fn a, b ->
+      a =
+        if is_list(a) do
+          Enum.reduce(a, unit, &Aggregator.insert(&2, &1))
+        else
+          a
+        end
+
+      if is_list(b) do
+        Enum.reduce(b, a, &Aggregator.insert(&2, &1))
+      else
+        Aggregator.merge(a, b)
+      end
+    end
+
+    transform(series, decide, &in_range(&1, from, to), unit, combine)
   end
 
-  def metadata(series) do
-    transform(series, &{:return, &1}, nil, Aggregator.clear(series.metadata), &Aggregator.merge/2)
+  def points(series, from, to \\ :now) do
+    decide = fn metadata ->
+      {t1, t2, _} = Aggregator.info(metadata)
+
+      if t2 < from or to < t1 do
+        :skip
+      else
+        :unroll
+      end
+    end
+
+    transform(series, decide, &in_range(&1, from, to), [], &++/2)
+  end
+
+  defp in_range(points, from, to) do
+    points
+    |> Enum.drop_while(fn {t, _} -> t < from end)
+    |> Enum.take_while(fn {t, _} -> t <= to end)
   end
 
   def transform(series = %{tree: tree}, decide, roll, unit, combine) do

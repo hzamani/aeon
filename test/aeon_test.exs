@@ -19,10 +19,11 @@ defmodule AeonTest do
         series
       end)
 
-    assert {:ok, metadata} = Series.metadata(series)
+    assert {:ok, metadata} = Series.metadata(series, 0)
     assert {10, count * 10, count} == Aggregator.info(metadata)
     assert count * (count + 1) / 2 == metadata.sum
-    assert {:ok, points} = Series.points(series)
+
+    assert {:ok, points} = Series.points(series, 0)
     assert count == length(points)
 
     points
@@ -31,5 +32,14 @@ defmodule AeonTest do
       assert timestamp == i * 10
       assert value == i
     end)
+
+    take = 100
+    from = (count - take) * 10
+    assert {:ok, points} = Series.points(series, from)
+    assert take + 1 == length(points)
+
+    assert {:ok, metadata} = Series.metadata(series, from)
+    assert {from, count * 10, take + 1} == Aggregator.info(metadata)
+    assert count * (take + 1) - take * (take + 1) / 2 == metadata.sum
   end
 end
